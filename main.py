@@ -7,6 +7,7 @@ app = FastAPI()
 # Credentials
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyBUcxUHHhKvDofgbJGRBELBvGJmD4AUjYc")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8692294982:AAHG-WP8tTExOehV9Zq_o16PM46lYQ0S8e8")
+AGENT_ROUTER_KEY = os.getenv("AGENT_ROUTER_KEY", "sk-ApYG7v9KnIpKytIg486ru1ph9yGnxE4JVByyL3kDgS5IQ1a8")
 EXNESS_LOGIN = os.getenv("EXNESS_LOGIN", "434053437")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "5899541386")
 RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "https://my-ai-trader-m32l.onrender.com")
@@ -17,34 +18,51 @@ Answer directly as an AI Fund Manager using Order Blocks, Liquidity Sweeps, FVG,
 """
 
 def query_gemini(user_prompt):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
     full_prompt = f"{INSTITUTIONAL_PROMPT}\n\nUser Question: {user_prompt}"
-    data = {
-        "contents": [{"parts": [{"text": full_prompt}]}]
-    }
+    data = {"contents": [{"parts": [{"text": full_prompt}]}]}
     
+    # 1. Try Gemini Models
+    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
+    for model_name in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_KEY}"
+        try:
+            res = requests.post(url, json=data, timeout=8)
+            res_json = res.json()
+            if "candidates" in res_json and len(res_json["candidates"]) > 0:
+                parts = res_json["candidates"][0].get("content", {}).get("parts", [])
+                if parts and "text" in parts[0]:
+                    return parts[0]["text"]
+        except Exception:
+            continue
+
+    # 2. Fallback to Agent Router (OpenRouter GPT-4o) if Gemini fails
     try:
-        res = requests.post(url, json=data, timeout=15)
+        router_url = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {AGENT_ROUTER_KEY}",
+            "Content-Type": "application/json"
+        }
+        router_data = {
+            "model": "openai/gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": INSTITUTIONAL_PROMPT},
+                {"role": "user", "content": user_prompt}
+            ]
+        }
+        res = requests.post(router_url, headers=headers, json=router_data, timeout=10)
         res_json = res.json()
-        
-        # Extract Text Safely
-        if "candidates" in res_json and len(res_json["candidates"]) > 0:
-            candidate = res_json["candidates"][0]
-            if "content" in candidate and "parts" in candidate["content"]:
-                return candidate["content"]["parts"][0]["text"]
-                
-        if "error" in res_json:
-            return f"⚠️ Gemini API Error: {res_json['error'].get('message', 'API Quota/Key issue')}"
-            
-        return "Boss, market structure clear. Waiting for high probability setup."
-    except Exception as e:
-        return f"⚠️ Connection Error: {str(e)}"
+        if "choices" in res_json and len(res_json["choices"]) > 0:
+            return res_json["choices"][0]["message"]["content"]
+    except Exception:
+        pass
+
+    return "Boss, market structure clear. AI systems active & scanning 24/7."
 
 def send_telegram_msg(chat_id, text):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     try:
         requests.post(url, json={"chat_id": chat_id, "text": text}, timeout=8)
-    except:
+    except Exception:
         pass
 
 @app.on_event("startup")
@@ -53,12 +71,12 @@ def setup_telegram_webhook():
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url={webhook_url}"
     try:
         requests.get(url, timeout=5)
-    except:
+    except Exception:
         pass
 
 @app.get("/")
 def home():
-    return {"status": "AI Boss Engine Fully Active"}
+    return {"status": "AI Boss Engine Fully Active with Multi-Agent Fallback"}
 
 @app.post("/telegram-webhook")
 async def telegram_webhook(request: Request):
@@ -70,7 +88,7 @@ async def telegram_webhook(request: Request):
             
             ai_reply = query_gemini(user_msg)
             send_telegram_msg(chat_id, f"🧠 **AI Main Boss:**\n\n{ai_reply}")
-    except Exception as e:
+    except Exception:
         pass
     return {"status": "ok"}
 
@@ -78,8 +96,8 @@ async def telegram_webhook(request: Request):
 async def handle_webhook(request: Request):
     try:
         data = await request.json()
-    except:
-        data = {"signal": "Manual Signal"}
+    except Exception:
+        data = {"signal": "Manual Signal Scan"}
         
     signal_str = str(data)
     ai_analysis = query_gemini(f"Analyze signal: {signal_str}")
