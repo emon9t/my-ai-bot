@@ -1,31 +1,47 @@
 import os
+import json
 import requests
 from fastapi import FastAPI, Request
 
 app = FastAPI()
 
-# Configuration & Active Groq Key
+# Credentials
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "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").strip()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8692294982:AAHG-WP8tTExOehV9Zq_o16PM46lYQ0S8e8").strip()
 EXNESS_LOGIN = os.getenv("EXNESS_LOGIN", "434053437").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "5899541386").strip()
 RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "https://my-ai-trader-m32l.onrender.com").strip()
 
-# MASTER INSTITUTIONAL SYSTEM PROMPT WITH ALL TRADING BOOKS & KNOWLEDGE
-INSTITUTIONAL_PROMPT = """You are the Ultimate Supreme Institutional AI Forex Fund Manager for Exness Platform.
-Your brain is encoded with the core principles of:
-1. ICT SMC Concepts (Order Blocks, FVG, Liquidity Sweeps, Market Structure Shift / MSS, BPR).
-2. Al Brooks 1-Minute Bar-by-Bar Price Action & Scalping Mastery.
-3. Fundamental High-Impact News Rules (NFP, CPI, FOMC Interest Rates).
-4. Exness Forex Market Dynamics (Spread management, Gold/XAUUSD, EURUSD, GBPUSD 1-minute execution).
+MEMORY_FILE = "/tmp/ai_memory.json"
 
-INSTRUCTIONS FOR 1-MINUTE FOREX SCALPING:
-- Analyze raw candle structure, wicks, body ratios, and high/low sweeps even without direct TV chart syncing.
-- Account for High-Impact Economic News volatility before recommending execution.
-- Give decisive, precise Buy/Sell execution signals with Stop Loss (SL), Take Profit (TP), and Dynamic Lot Allocation.
-- Keep answers ultra-smart, professional, aggressive, and authoritative as the AI Main Boss."""
+# Default Base Prompt
+DEFAULT_PROMPT = """You are the Supreme AI Fund Manager for Exness.
+Your brain handles ICT SMC, 1-Min Scalping, Balance Risk Management, and News Sentiment.
 
-def call_deepseek_groq(prompt: str):
+LANGUAGE & FORMAT:
+- Always reply in BANGLISH (Bengali written in English script).
+- Always calculate Lot Size according to Account Balance & Equity.
+- Give exact Entry, Stop Loss (SL), Take Profit (TP), and Risk Percentage."""
+
+def load_memory():
+    if os.path.exists(MEMORY_FILE):
+        try:
+            with open(MEMORY_FILE, "r") as f:
+                return json.load(f).get("prompt", DEFAULT_PROMPT)
+        except Exception:
+            pass
+    return DEFAULT_PROMPT
+
+def save_memory(new_prompt):
+    try:
+        with open(MEMORY_FILE, "w") as f:
+            json.dump({"prompt": new_prompt}, f)
+        return True
+    except Exception:
+        return False
+
+def call_deepseek_groq(user_input: str):
+    active_prompt = load_memory()
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
@@ -34,10 +50,10 @@ def call_deepseek_groq(prompt: str):
     payload = {
         "model": "llama-3.3-70b-versatile",
         "messages": [
-            {"role": "system", "content": INSTITUTIONAL_PROMPT},
-            {"role": "user", "content": prompt}
+            {"role": "system", "content": active_prompt},
+            {"role": "user", "content": user_input}
         ],
-        "temperature": 0.5
+        "temperature": 0.4
     }
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=12)
@@ -55,7 +71,6 @@ def process_ai_execution(prompt: str) -> str:
     success, res = call_deepseek_groq(prompt)
     if success:
         return f"🧠 **AI Main Boss:**\n\n{res}"
-    
     return f"⚠️ **AI Status Alert:**\n`{res}`"
 
 def send_telegram(chat_id, text):
@@ -80,7 +95,7 @@ def startup():
 
 @app.get("/")
 def home():
-    return {"status": "AI Scalping Master Live"}
+    return {"status": "AI Dynamic Memory Scalper Live"}
 
 @app.post("/telegram-webhook")
 async def telegram_webhook(request: Request):
@@ -88,9 +103,27 @@ async def telegram_webhook(request: Request):
         data = await request.json()
         if "message" in data and "text" in data["message"]:
             chat_id = data["message"]["chat"]["id"]
-            user_msg = data["message"]["text"]
+            user_msg = data["message"]["text"].strip()
             
-            ai_reply = process_ai_execution(f"Analyze for 1-minute Forex Scalping / Exness Execution: {user_msg}")
+            # Feature 1: Update Prompt directly from Telegram
+            if user_msg.startswith("/setprompt"):
+                new_instruction = user_msg.replace("/setprompt", "").strip()
+                if new_instruction:
+                    updated_prompt = f"{DEFAULT_PROMPT}\n\nUSER CUSTOM RULES:\n{new_instruction}"
+                    save_memory(updated_prompt)
+                    send_telegram(chat_id, "✅ **AI Memory Updated Successfully!**\nEkhon theke AI apnar ei notun nion ane trade korbe.")
+                else:
+                    send_telegram(chat_id, "⚠️ **Usage:** `/setprompt apnar instruction likhun`")
+                return {"status": "ok"}
+            
+            # Feature 2: View current prompt from Telegram
+            if user_msg == "/viewprompt":
+                current_p = load_memory()
+                send_telegram(chat_id, f"📝 **Current Active Memory:**\n\n`{current_p}`")
+                return {"status": "ok"}
+            
+            # General AI Execution
+            ai_reply = process_ai_execution(f"1-Minute Exness Analysis Request: {user_msg}")
             send_telegram(chat_id, ai_reply)
     except Exception:
         pass
@@ -104,9 +137,9 @@ async def tradingview_webhook(request: Request):
         data = {"signal": "Manual Signal"}
 
     signal_str = str(data)
-    ai_analysis = process_ai_execution(f"Evaluate 1-Min Signal for Exness Execution: {signal_str}")
+    ai_analysis = process_ai_execution(f"Evaluate Signal with Wallet Risk Control: {signal_str}")
     
-    msg = f"⚡ **FULL POWER 1M SIGNAL EXECUTED**\n\n**Data:** {signal_str}\n\n**AI Boss Decision:**\n{ai_analysis}\n\n**Exness Account:** {EXNESS_LOGIN}"
+    msg = f"⚡ **FULL POWER SIGNAL EXECUTED**\n\n**Data:** {signal_str}\n\n**AI Boss Decision:**\n{ai_analysis}\n\n**Exness Account:** {EXNESS_LOGIN}"
     send_telegram(TELEGRAM_CHAT_ID, msg)
     
     return {"status": "Success", "analysis": ai_analysis}
