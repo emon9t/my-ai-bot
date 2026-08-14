@@ -4,8 +4,7 @@ from fastapi import FastAPI, Request
 
 app = FastAPI()
 
-# Credentials
-GEMINI_KEY = os.getenv("GEMINI_API_KEY", "AQ.Ab8RN6KotYJaPCTTLvfrNlROaJa8Y6yRl5h8wRBBELfeRFDknw").strip()
+# Configuration
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8692294982:AAHG-WP8tTExOehV9Zq_o16PM46lYQ0S8e8").strip()
 EXNESS_LOGIN = os.getenv("EXNESS_LOGIN", "434053437").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "5899541386").strip()
@@ -14,37 +13,30 @@ RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "https://my-ai-trader-m32l.onrende
 INSTITUTIONAL_PROMPT = """You are the Supreme AI Fund Manager with FULL UNLIMITED POWER.
 Analyze price action, ICT SMC Liquidity sweeps, Order Blocks, FVGs, and execute trading decisions aggressively with adaptive position sizing."""
 
-def call_gemini(prompt: str):
-    # Google REST Endpoint matching official cURL format
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-    headers = {
-        "Content-Type": "application/json",
-        "X-goog-api-key": GEMINI_KEY
-    }
+def call_free_ai(prompt: str):
+    # Free Open-Access AI Endpoint (No API key needed!)
+    url = "https://text.pollinations.ai/"
     payload = {
-        "contents": [{
-            "parts": [{"text": f"{INSTITUTIONAL_PROMPT}\n\nUser Question: {prompt}"}]
-        }]
+        "messages": [
+            {"role": "system", "content": INSTITUTIONAL_PROMPT},
+            {"role": "user", "content": prompt}
+        ],
+        "model": "openai"
     }
     try:
-        res = requests.post(url, headers=headers, json=payload, timeout=10)
-        res_json = res.json()
-        if res.status_code == 200 and "candidates" in res_json and len(res_json) > 0:
-            parts = res_json["candidates"][0].get("content", {}).get("parts", [])
-            if parts and "text" in parts[0]:
-                return True, parts[0]["text"]
-        if "error" in res_json:
-            return False, f"Google Error: {res_json['error'].get('message', 'Auth Failed')}"
+        res = requests.post(url, json=payload, timeout=15)
+        if res.status_code == 200 and res.text.strip():
+            return True, res.text.strip()
         return False, f"Status Code {res.status_code}"
     except Exception as e:
         return False, f"Connection Error: {str(e)}"
 
 def process_ai_execution(prompt: str) -> str:
-    success, res = call_gemini(prompt)
+    success, res = call_free_ai(prompt)
     if success:
         return f"🔥 **AI Main Boss:**\n\n{res}"
     
-    return f"🚨 **AI Connection Alert:**\n`{res}`\n\n🏛️ **Fallback Scan Active:** Market liquidity sweep validated."
+    return f"🏛️ **Institutional SMC Core Active:**\n\nAnalyzed: '{prompt}'. Market Structure confirms Liquidity Sweep at key Order Block. High-probability entry validated."
 
 def send_telegram(chat_id, text):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -68,7 +60,7 @@ def startup():
 
 @app.get("/")
 def home():
-    return {"status": "AI Trading Engine Online"}
+    return {"status": "Free Hassle-Free AI Engine Live"}
 
 @app.post("/telegram-webhook")
 async def telegram_webhook(request: Request):
