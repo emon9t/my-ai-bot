@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 
 app = FastAPI()
 
-# Configuration & Updated Groq DeepSeek Key
+# Configuration & Active Groq Key
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "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").strip()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8692294982:AAHG-WP8tTExOehV9Zq_o16PM46lYQ0S8e8").strip()
 EXNESS_LOGIN = os.getenv("EXNESS_LOGIN", "434053437").strip()
@@ -32,7 +32,7 @@ def call_deepseek_groq(prompt: str):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "deepseek-r1-distill-llama-70b",
+        "model": "llama-3.3-70b-versatile",
         "messages": [
             {"role": "system", "content": INSTITUTIONAL_PROMPT},
             {"role": "user", "content": prompt}
@@ -54,9 +54,9 @@ def call_deepseek_groq(prompt: str):
 def process_ai_execution(prompt: str) -> str:
     success, res = call_deepseek_groq(prompt)
     if success:
-        return f"🧠 **AI Main Boss (DeepSeek 1M Master):**\n\n{res}"
+        return f"🧠 **AI Main Boss:**\n\n{res}"
     
-    return f"⚠️ **AI Status Alert:**\n`{res}`\n\n*(Please ensure GROQ_API_KEY is active)*"
+    return f"⚠️ **AI Status Alert:**\n`{res}`"
 
 def send_telegram(chat_id, text):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -80,7 +80,7 @@ def startup():
 
 @app.get("/")
 def home():
-    return {"status": "DeepSeek 1M Scalping Master Live"}
+    return {"status": "AI Scalping Master Live"}
 
 @app.post("/telegram-webhook")
 async def telegram_webhook(request: Request):
